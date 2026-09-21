@@ -1,0 +1,51 @@
+Provider/model: gemini / gemini-3.5-flash-lite  cache=off  workers=3
+
+[1/4] Interview-guide answers (6 questions x 3 experts)
+  guide Q1 [FR]      answered   claims=1 citations=1 attempts=1 first-pass-rejected=0
+  guide Q1 [DE]      answered   claims=4 citations=4 attempts=1 first-pass-rejected=0
+  guide Q1 [UK]      answered   claims=1 citations=1 attempts=1 first-pass-rejected=0
+  guide Q2 [FR]      answered   claims=3 citations=4 attempts=1 first-pass-rejected=0
+  guide Q2 [DE]      answered   claims=3 citations=3 attempts=1 first-pass-rejected=0
+  guide Q2 [UK]      answered   claims=3 citations=3 attempts=1 first-pass-rejected=0
+  guide Q3 [FR]      answered   claims=3 citations=3 attempts=1 first-pass-rejected=0
+  guide Q3 [DE]      answered   claims=3 citations=3 attempts=1 first-pass-rejected=0
+  guide Q3 [UK]      answered   claims=3 citations=3 attempts=1 first-pass-rejected=0
+  guide Q4 [FR]      answered   claims=2 citations=4 attempts=1 first-pass-rejected=0
+  guide Q4 [DE]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+  guide Q4 [UK]      answered   claims=3 citations=4 attempts=1 first-pass-rejected=0
+  guide Q5 [FR]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+  guide Q5 [DE]      answered   claims=3 citations=4 attempts=1 first-pass-rejected=0
+  guide Q5 [UK]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+  guide Q6 [FR]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+  guide Q6 [DE]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+  guide Q6 [UK]      answered   claims=2 citations=2 attempts=1 first-pass-rejected=0
+
+[2/4] Cross-expert themes and disagreements
+  theme: Uneven Adoption Across Hospitals  (coverage 3/3, 3 citations)
+  theme: Importance of Training and Utilisation  (coverage 3/3, 3 citations)
+  disagreement: Purchase Decision Timelines  (3 positions)
+  disagreement: Role of Economics Versus Clinical Strategy  (2 positions)
+  disagreement: Procedure Growth Expectations  (3 positions)
+
+[3/4] Free-form questions
+  answered   citations=3 experts=['DE', 'FR', 'UK']  How long does it take a hospital to purchase a robotic surgery system?
+  answered   citations=4 experts=['DE', 'FR', 'UK']  What role does surgeon training play in whether a robotic programme succeeds?
+  answered   citations=3 experts=['DE', 'FR', 'UK']  Do the experts expect robotic surgery procedure volumes to grow, and by how much?
+  answered   citations=5 experts=['DE', 'FR', 'UK']  Is the purchasing decision driven more by finance or by clinical factors?
+  answered   citations=3 experts=['DE', 'FR', 'UK']  How does adoption differ between large and small hospitals?
+  answered   citations=2 experts=['DE', 'FR']  What does the procurement team look at when evaluating a robotic system?
+
+[4/4] Out-of-scope questions (must return 'not discussed')
+  OK  not_discussed  What did the experts say about robotic surgery adoption in Japan?
+  OK  not_discussed  What is Intuitive Surgical's current share price?
+  OK  not_discussed  Which robot vendor or specific system model do the experts prefer?
+
+========================================================================
+Live API calls to gemini / gemini-3.5-flash-lite: 28  (cache hits: 0; rate-limit/overload retries: 0; tokens in/out incl. thinking: 30,355/8,260)
+Citations audited against raw transcript files: 83
+Quotes rejected by verify.py on first pass (then retried): 0
+Claims/quotes dropped after retry (never shown to user):  0
+Elapsed: 375.1s   Full report: .cache/report_gemini_fresh.json
+
+PASS: 83/83 displayed citations verified verbatim at their timestamps; 18/18 guide answers, themes, disagreements, 6 free-form and 3 out-of-scope checks OK.
+exit=0

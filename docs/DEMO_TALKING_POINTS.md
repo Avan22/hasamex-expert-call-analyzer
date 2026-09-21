@@ -13,11 +13,12 @@
 - Retrieval is real, not a shortcut. It indexes each expert turn together with its question, retrieves per expert for cross-expert questions, and skips the model entirely when nothing matches.
 - Kept proportional on purpose: no services, no database, no vector store for 3 files.
 
-## 3. Model choice (about 45 s)
-- The default is Claude Sonnet 5, set by one env var (`CLAUDE_MODEL`) and called only from `core/llm.py`.
+## 3. Model choice (about 1 min)
+- The recommended default is Claude Sonnet 5 (`MODEL_PROVIDER=anthropic`, `CLAUDE_MODEL`), called only from `core/llm.py`. The code currently defaults to Gemini only because that key has credits.
 - The task is exact extraction from short context, where instruction-following matters more than raw scale. A full run costs well under a dollar.
 - Structured outputs (a JSON schema) keep answers and citations as separate fields, so there is no regex parsing.
 - The verifier caps the downside of a smaller model: it can cost a retry, but it can't show a bad quote. If the numbers show it's needed, switching to `claude-opus-5` is a one-line change.
+- A second real provider, Gemini, sits behind the same wrapper and is selected by `MODEL_PROVIDER`. It was added to get a verified live run without Anthropic billing, not as a switch of recommendation.
 
 ## 4. Citations and timestamps (about 1.5 min)
 - The model never writes a timestamp. It picks a `segment_id` from an enum of the retrieved turns, and the timestamp comes from the file.
@@ -31,7 +32,8 @@
 - Numbers check: every figure in a claim must be in that claim's own quotes. For example, "25%" backed by a "15 to 20 percent" quote is rejected.
 - On failure, the app logs it, sends the real turn text back, retries once, then drops whatever still fails. A claim with no verified quote is never shown.
 - Live: ask "What is Intuitive Surgical's share price?" and it answers **Not discussed in the transcripts**. Then ask a timeline question and point out the answers of 6–12, 9–18 and 6–9 months, each quoted.
-- Show `test_citations.py`: 18 answers, themes, 6 free-form and 3 out-of-scope questions, with 128/128 citations audited against the raw `.txt` files by a *separate* implementation. The last run had 1 first-pass rejection, fixed by the retry, and 0 drops.
+- Show `test_citations.py --fresh`: 18 answers, themes, 6 free-form and 3 out-of-scope questions. It audits every citation against the raw `.txt` files with a *separate* implementation.
+- Real API result: 28 live calls to Gemini (`gemini-3.5-flash-lite`) with no cache, 83/83 citations verified, 0 first-pass rejections, 0 drops, and all 3 out-of-scope questions declined. The log is in `docs/verification_run_gemini.txt`.
 
 ## 6. Scaling to 30+ transcripts (about 1.5 min)
 - Putting every transcript in the prompt breaks down at hundreds of thousands of tokens: cost, latency and quote accuracy all suffer. Retrieval becomes load-bearing, and only `Retriever.search` changes.
@@ -42,4 +44,6 @@
 ## 7. One honest limitation (about 30 s)
 - The verifier guarantees quotes and numbers are real, but a claim sentence can still slightly shift tone. For example, the model wrote "roughly 15 to 20 percent" where Dr. Martin said "*maybe* 15 to 20 percent".
 - That's why the quote always sits next to the claim. The next step would be a per-claim entailment check with an LLM judge.
-- (Also be transparent: the recorded suite run used the Claude CLI as transport, with the same model, prompts and schemas, because no API key was on the build machine.)
+- Also be transparent about providers. Claude is the documented default, but the verified live run used Gemini's free tier, because the Anthropic key had no billing. Both are real backends behind `llm.py`, switched by `MODEL_PROVIDER`.
+- The run surfaced real problems: free-tier quotas of 5 requests per minute and 20 per day per model, and 503 overloads. Blind retries exhausted a daily quota, which led to a shared rate limiter that honours `RetryInfo` and fails fast on a daily quota.
+- Flash-Lite passed every check but gave thinner synthesis (2 themes vs Claude's 4–5). The verifier guarantees traceability, not depth.
