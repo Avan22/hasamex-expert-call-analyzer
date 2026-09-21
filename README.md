@@ -20,7 +20,7 @@ matters (retrieval, generation, verification) inspectable on its own.
 ## Setup and run
 
 Requires Python 3.10+ and an API key for one of the two supported providers:
-Anthropic (Claude, the documented default choice) or Google Gemini (free tier).
+Google Gemini (the current verified default, and free tier) or Anthropic (Claude).
 
 ```bash
 git clone https://github.com/Avan22/hasamex-expert-call-analyzer.git
@@ -38,15 +38,14 @@ streamlit run app.py
 ```
 
 It opens at http://localhost:8501. On the first load the app answers 18
-questions (6 guide questions x 3 experts). That takes about a minute on Claude, or
-about 4 minutes on Gemini's free tier, which is paced at 5 requests per minute. The
-results are cached in `.cache/`, so later loads are instant. The sidebar also
+questions (6 guide questions x 3 experts). On Gemini's free tier that takes about 4
+minutes, because calls are paced at 5 requests per minute. The results are cached in `.cache/`, so later loads are instant. The sidebar also
 accepts uploaded transcripts in the same `.txt` format.
 
 Run the tests:
 
 ```bash
-pytest -q                          # offline unit tests, no API key needed (~0.1 s)
+pytest -q                          # offline unit tests, no API key needed (<1 s)
 python test_citations.py           # end-to-end citation audit against the live model
 python test_citations.py --fresh   # same, ignoring the response cache
 ```
@@ -59,9 +58,9 @@ provider is actually called:
 | `anthropic` | `ANTHROPIC_API_KEY` | `CLAUDE_MODEL` | `claude-sonnet-5` |
 | `gemini` | `GEMINI_API_KEY` | `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
 
-The shipped `.env.example` sets `MODEL_PROVIDER=gemini`, because that is the provider
-the verified live run used (see [Model choice](#model-choice)). Set it to `anthropic`
-to use Claude. Switching provider or model needs no code changes. Cached responses
+Both the code and the shipped `.env.example` default to `MODEL_PROVIDER=gemini`,
+because Gemini is the only provider verified end to end against its live API (see
+[Model choice](#model-choice)). Set it to `anthropic` to use Claude. Switching provider or model needs no code changes. Cached responses
 are keyed by provider and model, so they never cross over.
 
 ---
@@ -86,7 +85,7 @@ data/*.txt ──► parser ──► segments (immutable, exact text, MM:SS, sp
                                │
 question ──► retrieval (BM25) ─┴─► top expert turns
                                         │
-                              generation (Claude, JSON schema)
+                     generation (llm.py: Gemini or Claude, JSON schema)
                                         │  claims + {segment_id, quote}
                                         ▼
                               verify ──► pass: re-slice exact text from source
@@ -157,54 +156,64 @@ map-reduce themes) are real and working now, so they can grow without a rewrite.
 
 ## Model choice
 
-The recommended model, and the documented default choice per the brief, is
-**Claude Sonnet 5** (`claude-sonnet-5`, with `MODEL_PROVIDER=anthropic`), called through
-`core/llm.py` and swappable with one environment variable. For now the code defaults
-`MODEL_PROVIDER` to `gemini`. That is only because the Gemini key is the one with
-working credits; see [Why Gemini is also wired in](#why-gemini-is-also-wired-in).
+**Current verified default: Gemini, `gemini-3.5-flash-lite`** (`MODEL_PROVIDER=gemini`).
+This is the only provider that has been run end to end against its live API. Two
+independent `python test_citations.py --fresh` runs both passed every check (74/74
+and 83/83 citations verified; see [Verification suite](#verification-suite)). The logs
+are in [`docs/verification_run_gemini_1.txt`](docs/verification_run_gemini_1.txt) and
+[`docs/verification_run_gemini_2.txt`](docs/verification_run_gemini_2.txt).
+
+**Claude (`claude-sonnet-5`) is fully implemented but has not been verified against
+the live Anthropic API.** The Anthropic backend in `core/llm.py` is complete and
+covered by the offline test suite. It has never made a real call, because the
+Anthropic account has no billing set up yet. It is therefore not presented as
+verified. Once billing is set up, the verification run is:
+
+```bash
+MODEL_PROVIDER=anthropic python test_citations.py --fresh
+```
+
+Until that run passes, treat Claude as untested in production.
+
+### Why Claude is still the intended production model
+
+These are reasons, not measured results. They become claims only after the Anthropic
+run above:
 
 - **The work is extraction, not open-ended reasoning.** It is short context, a fixed
   schema, and "find the sentence that says X and copy it exactly." What matters is
-  instruction-following and a low tendency to paraphrase or fill gaps. A mid-sized
-  current model does this well at a fraction of the price of the largest one.
-- **Cost-aware.** A full cold run (18 answers, themes and a few questions) is about
-  25 calls of a few thousand tokens each, well under a dollar on Sonnet 5.
-- **The verifier limits the downside.** A weaker model can cost retries, but it can't
-  put a bad quote on screen. The test suite measures this directly: in the last run
-  the verifier rejected 1 claim on the first pass, the retry fixed it, and nothing
-  was dropped.
-- **Upgrade path.** If accuracy testing shows more first-pass rejections or weaker
-  synthesis, set `CLAUDE_MODEL=claude-opus-5`. Nothing else changes.
+  instruction-following and a low tendency to paraphrase or fill gaps, and a
+  mid-sized current model should do this well at a fraction of the price of the
+  largest one.
+- **Richer synthesis.** Flash-Lite passes every check but its cross-expert synthesis
+  is thin (2 common themes per run). An earlier Claude run found 4–5 themes, but it
+  used the Claude Code CLI rather than the API (see
+  [Verification suite](#verification-suite)), so it is indicative, not verified.
+- **Swappable.** The provider is one env var (`MODEL_PROVIDER`), and the model is
+  another (`CLAUDE_MODEL`, for example `claude-opus-5` if accuracy testing shows the
+  need).
 
-### Why Gemini is also wired in
+Whatever the model, **the verifier limits the downside.** A weaker model can cost
+retries but cannot put a bad quote on screen. In the second Gemini run the verifier
+rejected 2 first-pass claims, a 2-word quote and a claim that said more than its
+quote, and the retry fixed both.
 
-Claude remains the documented default choice, for the reasons above. Gemini was
-added for one specific reason: to get a **genuine, verified end-to-end run through
-the real `generation.py` → `llm.py` → provider API path** without needing Anthropic
-billing, since Gemini has a no-billing free tier. It is a proper second backend (the
-official `google-genai` SDK with native JSON-schema output), not a stub, and not a
-permanent switch. `.env.example` currently sets `MODEL_PROVIDER=gemini` only because
-that is the key with working credits behind it. Once an Anthropic key is funded, set
-`MODEL_PROVIDER=anthropic` and rerun `python test_citations.py --fresh` to verify the
-Claude path the same way. Both providers stay working, and the offline tests cover
-both backends' request and response handling.
+### How the Gemini model was chosen
 
-How the Gemini model was chosen: I listed the models available to the key via
-`GET /v1beta/models`, cross-checked the free tier on Google's pricing page, and
-tested candidates live.
+I listed the models available to the key via `GET /v1beta/models`, cross-checked the
+free tier on Google's pricing page, and tested candidates live.
 
 - `gemini-2.5-flash` is retired for new keys (404).
 - `gemini-3.7-flash` and `gemini-3.8-flash` were returning 503 "high demand".
 - `gemini-3.6-flash` worked, but the live API reported a free-tier quota of **20
-  requests per day** for it, and one full `--fresh` suite run is 28 or more calls.
-  It cannot complete a verified run within a day.
-- The default is therefore **`gemini-3.5-flash-lite`**, a current Flash-tier model.
-  It completed the whole suite in one run with no rate-limit or overload retries,
-  and responded in about 2 s per call instead of 10 to 40 s.
+  requests per day** for it, and one full `--fresh` run is 28 or more calls. It
+  cannot complete a verified run within a day.
+- **`gemini-3.5-flash-lite`**, a current Flash-tier model, completed the whole suite
+  twice with no rate-limit or overload retries, at about 2 s per call.
 
 Override the model with `GEMINI_MODEL`. The verifier and audit are
-model-independent, so a different model only changes how many retries are needed,
-never whether an unverified quote can reach the screen.
+model-independent, so a different model changes how many retries are needed, never
+whether an unverified quote can reach the screen.
 
 ---
 
@@ -247,7 +256,8 @@ following instructions. The prompt is a second layer.
    under 3 words, ellipsis-spliced quotes, and quotes from the wrong expert (for
    example a German quote on a UK position) are all rejected.
 5. **A numbers check.** Any number in a claim must appear in that claim's own quotes,
-   or in the question itself (such as "3–5 years"). A claim of "25% growth" backed by
+   in the question itself (such as "3–5 years"), or be the number of experts ("all
+   three experts"). A claim of "25% growth" backed by
    a "15 to 20 percent" quote is rejected, even though the quote is real.
 6. **Retry with the real text, then drop.** Failures are logged, then sent back to
    the model once together with the exact source text. Anything that still fails is
@@ -265,22 +275,31 @@ every displayed citation with a **separate implementation** that re-reads the ra
 `.txt` files, so a bug in `verify.py` cannot hide itself. It exits non-zero if
 anything fails.
 
-**Latest result: real API run** (`MODEL_PROVIDER=gemini`, `gemini-3.5-flash-lite`,
-`python test_citations.py --fresh`, 2026-09-21). There was no cache and no substitute:
-every call went over the network to the Gemini API through the production
-`generation.py` → `llm.py` path. The full log is committed as
-[`docs/verification_run_gemini.txt`](docs/verification_run_gemini.txt).
+**Real API results.** There were two independent runs of
+`python test_citations.py --fresh` on 2026-09-21, both with `MODEL_PROVIDER=gemini`
+and `gemini-3.5-flash-lite`, and both with no cache and no substitute: every call went
+over the network to the Gemini API through the production `generation.py` → `llm.py`
+path. The second run used a newly issued key. Full logs:
+[`docs/verification_run_gemini_1.txt`](docs/verification_run_gemini_1.txt) and
+[`docs/verification_run_gemini_2.txt`](docs/verification_run_gemini_2.txt).
 
-```
-Live API calls to gemini / gemini-3.5-flash-lite: 28  (cache hits: 0; rate-limit/overload retries: 0)
-Citations audited against raw transcript files: 83
-Quotes rejected by verify.py on first pass (then retried): 0
-Claims/quotes dropped after retry (never shown to user):  0
-PASS: 83/83 displayed citations verified verbatim at their timestamps; 18/18 guide
-answers, themes, disagreements, 6 free-form and 3 out-of-scope checks OK.
-```
+| | Run 1 | Run 2 |
+|---|---|---|
+| Live API calls (cache hits) | 28 (0) | 29 (0) |
+| Rate-limit / overload retries | 0 | 0 |
+| Citations audited against raw `.txt` files | **83/83 pass** | **74/74 pass** |
+| Quotes rejected on first pass, then fixed by the retry | 0 | 2 |
+| Claims dropped after retry | 0 | 0 |
+| Guide answers / themes & disagreements / free-form / out-of-scope | 18/18 · ✓ · 6/6 · 3/3 declined | 18/18 · ✓ · 6/6 · 3/3 declined |
 
-What the run surfaced, and what was fixed because of it:
+The citation *count* differs between runs because each fresh run generates new
+answers, and the model chooses how many quotes to cite. The pass rate (every
+displayed citation verified) is the invariant, and it was 100% in both runs. Run 2's
+two first-pass rejections were a 2-word quote ("Very important"), which the retry
+replaced with the full sentence, and a claim that mentioned "two systems" while its
+quote stopped before that phrase.
+
+What the live API surfaced, and what was fixed because of it:
 
 - **Free-tier quotas are per model, per minute and per day.** The first live attempt
   used 3 parallel workers with the SDK's built-in retries. Every blind retry counted
@@ -293,20 +312,18 @@ What the run surfaced, and what was fixed because of it:
 - **Model availability changes.** `gemini-2.5-flash` returned 404 for this key. Model
   ids were verified against the live `models` endpoint rather than assumed.
 
-**Quality compared with Claude.** Both runs passed every check. Flash-Lite's answers
-are correct and keep the experts' hedging ("maybe 15 to 20 percent", "probably
-closer to high single digits"), but they are thinner. The themes step found 2 common
-themes, where Claude found 4 to 5. One "current adoption" answer also drifted into
-the expert's outlook, although it was accurately quoted. The verifier guarantees
-traceability, not depth, which is one reason Claude remains the documented default.
+**Answer quality on Gemini.** Answers are correct and keep the experts' hedging
+("maybe 15 to 20 percent", "probably closer to high single digits"), but the synthesis
+is thin: 2 common themes per run. In run 1, one "current adoption" answer also drifted
+into the expert's outlook, although it was accurately quoted. The verifier guarantees
+traceability, not depth.
 
-**Earlier run, not via the API:** before any key was available, the same suite passed
-128/128 on `claude-sonnet-5`. That run used the Claude Code CLI as the transport
-(`claude -p --json-schema`) instead of the Anthropic SDK path in `llm.py`, so it
-validated the prompts, schemas and verifier with Claude, but **not** the production
-API call. The Anthropic path is covered by unit tests and becomes live-verifiable
-with `MODEL_PROVIDER=anthropic python test_citations.py --fresh` once a funded key
-is available.
+**Earlier run, not via the API.** Before any key was available, the suite passed
+128/128 on `claude-sonnet-5` with the Claude Code CLI as the transport
+(`claude -p --json-schema`) instead of the Anthropic SDK path in `llm.py`. That run
+exercised the prompts, schemas and verifier with a Claude model. It did **not**
+exercise the production Anthropic API call, so it does not count as verification of
+the Claude path.
 
 `tests/` (44 tests, no network, under a second) covers the parser, retrieval and
 verifier edge cases, plus both provider backends: request shape, role mapping,
@@ -353,8 +370,11 @@ current `themes.py` already has the right shape:
 3. **Verify every level** with the same verifier, so a theme at the top still points
    to an exact line in a specific call.
 
-**Cost and latency.** At 3 transcripts a cold run is about 25 calls and takes about
-a minute, well under a dollar. At 30 transcripts, the map step is 30 × 6 = 180 calls,
+**Cost and latency.** At 3 transcripts a full cold run is 28–29 calls (measured) and
+about 30k input and 8k output tokens (including thinking). On Gemini's free tier it
+costs nothing and takes 6–7 minutes, almost all of it the 5-requests-per-minute
+pacing rather than model time (about 2 s per call). On a paid tier the calls can run
+in parallel. At 30 transcripts, the map step is 30 × 6 = 180 calls,
 but they are independent: they parallelise (bounded by rate limits) and can use the
 **Message Batches API** at half price, since pre-computing guide answers is not
 interactive. Each call stays small because of retrieval, so cost grows roughly
@@ -368,10 +388,18 @@ change, not on every page load.
 
 ## Known limitations
 
+- **Claude has not been run against the live Anthropic API.** The Anthropic backend is
+  implemented and unit-tested offline, but it has never made a real API call, because
+  the Anthropic account has no billing yet. Only the Gemini path is verified end to
+  end. Until `MODEL_PROVIDER=anthropic python test_citations.py --fresh` passes, the
+  Claude path should be treated as untested.
+- **Verified on a lightweight model.** The verified runs used Gemini Flash-Lite, which
+  passes every traceability check but produces thinner cross-expert synthesis
+  (2 themes). Traceability is proven; depth of analysis on this model is modest.
 - **The verifier checks quotes and numbers, not every nuance of a paraphrase.** Each
   claim sentence is written by the model. Its quote is guaranteed real and its
   numbers must match the quote, but a claim can still slightly over- or
-  under-state the quote's tone (for example "roughly 15 to 20 percent" for the
+  under-state the quote's tone (in one earlier run, "roughly 15 to 20 percent" for the
   expert's "maybe 15 to 20 percent"). That is why the quote is always shown next
   to the claim. An LLM-as-judge entailment check per claim would be the next step.
 - **Retrieval is lexical.** BM25 plus a hand-written synonym list works for this

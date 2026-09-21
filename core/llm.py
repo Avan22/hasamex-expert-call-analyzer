@@ -3,10 +3,11 @@
 Every model call in the project goes through ``call_json``. Two real providers
 sit behind it, chosen by one environment variable:
 
-    MODEL_PROVIDER=anthropic   Claude via the Anthropic SDK (the documented
-                               default choice; see README "Model choice")
-    MODEL_PROVIDER=gemini      Gemini via Google's google-genai SDK (wired in to
-                               get a verified live run on Gemini's free tier)
+    MODEL_PROVIDER=gemini      Gemini via Google's google-genai SDK. The current
+                               default, and the only provider verified end to end
+                               against its live API (see README "Model choice").
+    MODEL_PROVIDER=anthropic   Claude via the Anthropic SDK. Implemented and
+                               unit-tested, not yet run against the live API.
 
 Both use schema-constrained JSON output, so answers and citations come back
 as separable fields rather than prose that has to be re-parsed. The rest of
