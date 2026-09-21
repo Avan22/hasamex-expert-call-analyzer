@@ -22,7 +22,9 @@ import logging
 from dataclasses import dataclass, field
 
 from . import llm
-from .generation import SYSTEM_PROMPT, Answer, citation_schema, format_excerpts, generate_verified
+from .generation import (
+    SYSTEM_PROMPT, Answer, citation_schema, format_excerpts, generate_verified, numbers_in,
+)
 from .parser import Transcript, preceding_question
 from .retrieval import RetrievalHit
 from .verify import CitationVerifier
@@ -158,6 +160,8 @@ def analyze(
         gen = generate_verified(
             SYSTEM_PROMPT, user, themes_schema(cited_ids, expert_ids), verifier,
             allowed_expert_ids=set(expert_ids), use_cache=use_cache,
+            allowed_numbers=frozenset(numbers_in(" ".join(a.question for a in per_expert_answers))
+                                      | {str(len(expert_ids))}),
         )
     except llm.LLMError as e:
         result.error = str(e)

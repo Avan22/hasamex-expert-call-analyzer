@@ -103,6 +103,12 @@ def test_claim_with_invented_number_is_rejected():
     assert issues and payload["citations"] == []
 
 
+def test_question_numbers_and_expert_count_allowed():
+    payload = {"claim": "All three experts expect growth over the next 3-5 years",
+               "citations": [{"quote": "I expect adoption to continue increasing"}]}
+    assert check_claim_numbers(payload, frozenset({"3", "5"})) == [] and payload["citations"]
+
+
 def test_claim_with_matching_numbers_passes():
     payload = {"claim": "Six to twelve months is realistic",
                "citations": [{"quote": "Six to twelve months is realistic once the hospital becomes serious"}]}

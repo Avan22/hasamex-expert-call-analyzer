@@ -107,8 +107,10 @@ def answer_schema(segment_ids: list[str]) -> dict:
 
 # --- deterministic claim check: numbers in a claim must appear in its quotes ---
 
+# "one" is left out on purpose: it is far more often a pronoun ("one of the
+# factors") than a figure, and the digit "1" is still checked.
 _NUMBER_WORDS = {
-    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
+    "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
     "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11",
     "twelve": "12", "thirteen": "13", "fourteen": "14", "fifteen": "15",
     "sixteen": "16", "seventeen": "17", "eighteen": "18", "nineteen": "19",
@@ -124,10 +126,14 @@ def numbers_in(text: str) -> set[str]:
     return found
 
 
-def check_claim_numbers(payload, _path: str = "$") -> list[FailedCitation]:
+def check_claim_numbers(
+    payload, allowed: frozenset[str] = frozenset(), _path: str = "$"
+) -> list[FailedCitation]:
     """For every dict holding verified citations plus a text field, require
-    that every number in the text appears in the quotes it cites. Offending
-    items have their citations cleared, which makes them unsupported."""
+    that every number in the text appears in the quotes it cites, or in
+    ``allowed`` (numbers from the question itself, such as "3-5 years", and
+    the number of experts, as in "all three experts"). Offending items have
+    their citations cleared, which makes them unsupported."""
     issues: list[FailedCitation] = []
     if isinstance(payload, dict):
         cites = payload.get("citations")
@@ -136,9 +142,7 @@ def check_claim_numbers(payload, _path: str = "$") -> list[FailedCitation]:
                 str(payload.get(k, "")) for k in ("claim", "summary", "position") if k in payload
             )
             quoted = set().union(*(numbers_in(c["quote"]) for c in cites)) if cites else set()
-            # Year ranges like "3-5 years" come from the question wording; the
-            # quotes say "three to five years", which numbers_in also maps.
-            missing = numbers_in(text) - quoted
+            missing = numbers_in(text) - quoted - allowed
             if cites and missing:
                 issues.append(
                     FailedCitation(
@@ -151,10 +155,10 @@ def check_claim_numbers(payload, _path: str = "$") -> list[FailedCitation]:
                 payload["citations"] = []
         for k, v in payload.items():
             if k != "citations":
-                issues.extend(check_claim_numbers(v, f"{_path}.{k}"))
+                issues.extend(check_claim_numbers(v, allowed, f"{_path}.{k}"))
     elif isinstance(payload, list):
         for i, item in enumerate(payload):
-            issues.extend(check_claim_numbers(item, f"{_path}[{i}]"))
+            issues.extend(check_claim_numbers(item, allowed, f"{_path}[{i}]"))
     return issues
 
 
@@ -192,11 +196,12 @@ def generate_verified(
     verifier: CitationVerifier,
     allowed_expert_ids: set[str] | None = None,
     use_cache: bool = True,
+    allowed_numbers: frozenset[str] = frozenset(),
 ) -> VerifiedGeneration:
     messages = [{"role": "user", "content": user_content}]
     raw = llm.call_json(system, messages, schema, use_cache=use_cache)
     payload, failures = verify_payload(raw, verifier, allowed_expert_ids)
-    failures += check_claim_numbers(payload)
+    failures += check_claim_numbers(payload, allowed_numbers)
     result = VerifiedGeneration(payload, failures_first_pass=list(failures))
     if not failures:
         return result
@@ -208,7 +213,7 @@ def generate_verified(
     ]
     raw2 = llm.call_json(system, retry_messages, schema, use_cache=use_cache)
     payload2, failures2 = verify_payload(raw2, verifier, allowed_expert_ids)
-    failures2 += check_claim_numbers(payload2)
+    failures2 += check_claim_numbers(payload2, allowed_numbers)
     for f in failures2:
         log.warning("dropped after retry: %s | %r", f.reason, f.quote)
     result.payload, result.failures_final, result.attempts = payload2, failures2, 2
@@ -263,6 +268,7 @@ def generate_answer(
         gen = generate_verified(
             SYSTEM_PROMPT, user, answer_schema(ans.retrieved), verifier,
             allowed_expert_ids=set(scope), use_cache=use_cache,
+            allowed_numbers=frozenset(numbers_in(question) | {str(len(verifier.transcripts))}),
         )
     except llm.LLMError as e:
         ans.status, ans.error = "error", str(e)
