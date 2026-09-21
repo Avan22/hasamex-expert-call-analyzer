@@ -28,6 +28,7 @@ import sys
 import time
 from pathlib import Path
 
+from core import llm
 from core.pipeline import DATA_DIR, Pipeline
 
 FREE_FORM = [
@@ -108,7 +109,8 @@ def main() -> int:
                 failures.append(err)
 
     t0 = time.time()
-    print(f"Model: {__import__('core.llm', fromlist=['x']).model_name()}  cache={'on' if use_cache else 'off'}\n")
+    print(f"Provider/model: {llm.describe()}  cache={'on' if use_cache else 'off'}  "
+          f"workers={llm.max_workers()}\n")
 
     # 1. Interview guide x experts
     print("[1/4] Interview-guide answers (6 questions x 3 experts)")
@@ -177,6 +179,10 @@ def main() -> int:
 
     Path(args.report).write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str))
     print("\n" + "=" * 72)
+    s = llm.stats
+    print(f"Live API calls to {llm.describe()}: {s['api_calls']}  (cache hits: {s['cache_hits']}; "
+          f"rate-limit/overload retries: {s['retries']}; "
+          f"tokens in/out incl. thinking: {s['input_tokens']:,}/{s['output_tokens']:,})")
     print(f"Citations audited against raw transcript files: {audited}")
     print(f"Quotes rejected by verify.py on first pass (then retried): {first_pass_rejections}")
     print(f"Claims/quotes dropped after retry (never shown to user):  {final_drops}")

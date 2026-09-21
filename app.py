@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import html
 import logging
-import os
 
 import streamlit as st
 
@@ -157,7 +156,7 @@ with st.sidebar:
     )
     render_transcript(pipe, expert_choice)
     st.divider()
-    st.caption(f"Model: `{llm.model_name()}` (set `CLAUDE_MODEL` to change)")
+    st.caption(f"Model: `{llm.describe()}` (set `MODEL_PROVIDER` / `CLAUDE_MODEL` / `GEMINI_MODEL` to change)")
     use_cache = not st.toggle("Ignore response cache (fresh model calls)", value=False)
 
 
@@ -171,8 +170,14 @@ st.caption(
     "**View in transcript** to see it highlighted in the sidebar."
 )
 
-if not os.getenv("ANTHROPIC_API_KEY"):
-    st.error("`ANTHROPIC_API_KEY` is not set. Copy `.env.example` to `.env`, add your key, and restart.")
+try:
+    key_ok = llm.api_key_present()
+except llm.LLMError as e:
+    st.error(str(e))
+    st.stop()
+if not key_ok:
+    st.error(f"`{llm.KEY_ENV[llm.provider()]}` is not set for MODEL_PROVIDER=`{llm.provider()}`. "
+             "Copy `.env.example` to `.env`, add your key, and restart.")
     st.stop()
 
 tab_qa, tab_themes, tab_ask = st.tabs(

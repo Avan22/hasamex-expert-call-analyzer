@@ -5,6 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from . import llm
 from .generation import Answer, generate_answer
 from .parser import Transcript, load_transcripts, parse_interview_guide
 from .retrieval import Retriever
@@ -44,9 +45,9 @@ class Pipeline:
         )
         return generate_answer(question, hits, self.verifier, [expert_id], instruction, use_cache)
 
-    def all_guide_answers(self, use_cache: bool = True, workers: int = 6) -> list[Answer]:
+    def all_guide_answers(self, use_cache: bool = True, workers: int | None = None) -> list[Answer]:
         jobs = [(q, eid) for q in self.questions for eid in self.expert_ids]
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        with ThreadPoolExecutor(max_workers=workers or llm.max_workers()) as pool:
             return list(pool.map(lambda j: self.answer_guide_question(*j, use_cache=use_cache), jobs))
 
     def cross_expert(self, answers: list[Answer], use_cache: bool = True) -> CrossExpertAnalysis:
