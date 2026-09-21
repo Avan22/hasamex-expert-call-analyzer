@@ -1,0 +1,23 @@
+# virtual environments
+.venv/
+venv/
+env/
+
+# secrets
+.env
+
+# caches and generated output
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+verification_report.json
+.streamlit/secrets.toml
+
+# local vector index files (if an embedding store is added)
+*.faiss
+*.index
+chroma/
+.chroma/
+
+.DS_Store
