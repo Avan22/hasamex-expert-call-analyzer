@@ -73,14 +73,13 @@ def set_focus(segment_id: str, quote: str) -> None:
 def render_citation(c: dict, key: str) -> None:
     st.markdown(f'<div class="quote">“{html.escape(c["quote"])}”</div>', unsafe_allow_html=True)
     corrected = " · timestamp corrected by verifier" if c["status"] == "corrected" else ""
-    meta, btn = st.columns([5, 2])
-    meta.markdown(
+    st.markdown(
         f'<div class="cite-meta">{html.escape(c["expert_name"])} · <b>{c["timestamp"]}</b> · '
         f'✓ verified verbatim{corrected}</div>',
         unsafe_allow_html=True,
     )
-    btn.button("View in transcript", key=key, on_click=set_focus,
-               args=(c["segment_id"], c["quote"]), use_container_width=True)
+    st.button("↗ View in transcript", key=key, on_click=set_focus,
+              args=(c["segment_id"], c["quote"]), type="tertiary")
 
 
 def render_answer(a: Answer, key: str, show_experts: bool = False) -> None:
